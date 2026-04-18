@@ -333,7 +333,8 @@ function renderClientDetail(){
           <div style="text-align:center;background:rgba(255,255,255,.15);padding:8px 14px;border-radius:10px"><div style="font-size:10px;color:rgba(255,255,255,.7)">AUM รวม</div><div style="font-size:14px;font-weight:700">฿${fmt(cal.total)}</div></div>
           <div style="text-align:center;background:rgba(255,255,255,.15);padding:8px 14px;border-radius:10px"><div style="font-size:10px;color:rgba(255,255,255,.7)">เบี้ย/ปี</div><div style="font-size:14px;font-weight:700">฿${fmt(cal.iprem)}</div></div>
           ${daysLeft!==null?`<div style="text-align:center;background:${daysLeft<=7?'rgba(239,68,68,.4)':'rgba(245,158,11,.3)'};padding:8px 14px;border-radius:10px"><div style="font-size:10px;color:rgba(255,255,255,.85)">ครบกำหนดถัดไป</div><div style="font-size:14px;font-weight:700">${daysLeft} วัน</div></div>`:''}
-          <button class="btn no-print" style="background:rgba(255,255,255,.2);color:#fff;font-size:12px" onclick="openReport(${c.id})">📄 รายงาน</button>
+          <button class="btn no-print" style="background:rgba(255,255,255,.2);color:#fff;font-size:12px" onclick="openReport(${c.id})">📄 ดูรายงาน</button>
+          <button class="btn no-print" style="background:rgba(255,255,255,.9);color:#6366f1;font-size:12px;font-weight:600" onclick="downloadPDF(${c.id})">📥 PDF</button>
         </div>
       </div>
       <div class="client-tabs">${[['insurance','🛡️ ประกัน'],['stocks','📈 หุ้น'],['funds','📊 กองทุน'],['property','🏠 อสังหาฯ']].map(([k,l])=>`<button class="ct${curClientTab===k?' on':''}" onclick="curClientTab='${k}';render()">${l}</button>`).join('')}</div>
@@ -416,24 +417,59 @@ function renderClientProperty(c){
   </div>`;
 }
 
-// ── Report ──
-function openReport(id){
-  const c=D.clients.find(x=>x.id===id);if(!c)return;
+// ── Report HTML ──
+function reportHTML(id){
+  const c=D.clients.find(x=>x.id===id);if(!c)return'';
   const cal=calcClient(c);
   const now=new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
   const ins=c.insurance||[],stocks=c.stocks||[],funds=c.funds||[],props=c.props||[];
   const tl={'unit-link':'Unit Link',pension:'บำนาญ',savings:'ออมทรัพย์',whole:'ตลอดชีพ',term:'ชั่วระยะเวลา'};
   const ftl={equity:'หุ้นไทย',bond:'ตราสารหนี้',foreign:'หุ้นต่างประเทศ',rmf:'RMF',ssf:'SSF',mixed:'ผสม'};
   const pie=[{name:'หุ้น',value:cal.sv,color:'#6366f1'},{name:'กองทุน',value:cal.fv,color:'#f59e0b'},{name:'ประกัน',value:cal.iv,color:'#ec4899'},{name:'อสังหาฯ',value:cal.pv,color:'#10b981'}].filter(d=>d.value>0);
-  showModal(`📄 รายงานพอร์ต`,`
+  return`
     <div class="rpt-hdr"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px"><div><div style="font-size:10px;opacity:.7;text-transform:uppercase;margin-bottom:4px">รายงานพอร์ตการลงทุน</div><div style="font-size:20px;font-weight:700">${c.name}</div><div style="font-size:12px;opacity:.8;margin-top:3px">${c.age} ปี • ${c.occupation}${c.phone?' • '+c.phone:''}</div></div><div style="text-align:right"><div style="font-size:11px;opacity:.7">จัดทำโดย ${D.agentName}</div><div style="font-size:11px;opacity:.65;margin-top:2px">${now}</div><div style="font-size:24px;font-weight:700;margin-top:8px">฿${fmt(cal.total)}</div><div style="font-size:10px;opacity:.7">มูลค่าสินทรัพย์รวม</div></div></div></div>
-    <div class="report-section"><h4>💰 สรุปมูลค่าสินทรัพย์</h4><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${pie.length?pieSVG(pie,96):''}<div style="flex:1;min-width:160px"><table style="width:100%;font-size:12px;border-collapse:collapse">${pie.map(d=>`<tr><td style="padding:5px 8px"><div style="display:flex;align-items:center;gap:7px"><div style="width:9px;height:9px;border-radius:50%;background:${d.color}"></div><span style="color:var(--g600)">${d.name}</span></div></td><td style="padding:5px 8px;font-weight:600;text-align:right">฿${fmt(d.value)}</td><td style="padding:5px 8px;color:var(--g400);font-size:11px;text-align:right">${cal.total>0?(d.value/cal.total*100).toFixed(0):0}%</td></tr>`).join('')}<tr style="border-top:1px solid var(--g200)"><td colspan="2" style="padding:6px 8px;font-weight:700;font-size:14px;color:var(--indigo)">฿${fmt(cal.total)}</td><td></td></tr></table></div></div></div>
-    ${ins.length?`<div class="report-section"><h4>🛡️ กรมธรรม์ (${ins.length} ฉบับ)</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>แบบประกัน</th><th>บริษัท</th><th>ประเภท</th><th class="r">เบี้ย/ปี</th><th class="r">มูลค่า</th><th class="r">ครบกำหนด</th></tr></thead><tbody>${ins.map(i=>{const lv=i.startDate&&i.sumInsured?calcSV(Number(i.sumInsured),i.startDate):null;const dv=lv!==null?lv:i.curVal;return`<tr><td><b>${i.plan}</b></td><td style="color:var(--g500)">${i.co}</td><td>${tl[i.type]||i.type}</td><td class="r">฿${fmt(i.premium)}</td><td class="r" style="color:var(--green)">฿${fmt(dv||0)}</td><td class="r" style="font-size:11px;color:var(--g500)">${i.dueDate||'—'}</td></tr>`;}).join('')}<tr style="background:var(--amber-lt)"><td colspan="3" style="font-weight:600">รวมเบี้ย/ปี</td><td class="r" style="font-weight:700;color:var(--amber)">฿${fmt(cal.iprem)}</td><td class="r" style="font-weight:700;color:var(--green)">฿${fmt(cal.iv)}</td><td></td></tr></tbody></table></div></div>`:''}
-    ${stocks.length?`<div class="report-section"><h4>📈 พอร์ตหุ้น</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>หุ้น</th><th>ชื่อบริษัท</th><th class="r">จำนวน</th><th class="r">ต้นทุน</th><th class="r">ราคา</th><th class="r">มูลค่า</th><th class="r">กำไร</th></tr></thead><tbody>${stocks.map(s=>{const fx=s.mkt==='US'?FX:1,v=s.qty*s.price*fx,co=s.qty*s.cost*fx,pnl=v-co;return`<tr><td><b>${s.sym}</b></td><td style="color:var(--g500)">${s.name}</td><td class="r">${fmt(s.qty)}</td><td class="r">${s.mkt==='US'?'$':'฿'}${fmtD(s.cost)}</td><td class="r">${s.mkt==='US'?'$':'฿'}${fmtD(s.price)}</td><td class="r" style="font-weight:500">฿${fmt(v)}</td><td class="r" style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}฿${fmt(pnl)}</td></tr>`;}).join('')}<tr style="background:var(--indigo-lt)"><td colspan="5" style="font-weight:600">รวม</td><td class="r" style="font-weight:700">฿${fmt(cal.sv)}</td><td class="r" style="font-weight:700;color:${cal.sv>=cal.sc?'var(--green)':'var(--red)'}">${cal.sv>=cal.sc?'+':''}฿${fmt(cal.sv-cal.sc)}</td></tr></tbody></table></div></div>`:''}
-    ${funds.length?`<div class="report-section"><h4>📊 กองทุนรวม</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>กองทุน</th><th>ประเภท</th><th class="r">NAV</th><th class="r">หน่วย</th><th class="r">มูลค่า</th><th class="r">กำไร</th></tr></thead><tbody>${funds.map(f=>{const v=f.nav*f.units,co=f.cost*f.units,pnl=v-co,pp=co>0?(pnl/co*100):0;return`<tr><td><b>${f.sym}</b><div style="font-size:10px;color:var(--g400)">${f.name}</div></td><td>${ftl[f.type]||f.type}</td><td class="r">฿${fmtD(f.nav)}</td><td class="r">${fmt(f.units)}</td><td class="r" style="font-weight:500">฿${fmt(v)}</td><td class="r" style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pp.toFixed(1)}%</td></tr>`;}).join('')}<tr style="background:var(--amber-lt)"><td colspan="4" style="font-weight:600">รวม</td><td class="r" style="font-weight:700">฿${fmt(cal.fv)}</td><td class="r" style="font-weight:700;color:${cal.fv>=cal.fc?'var(--green)':'var(--red)'}">${cal.fv>=cal.fc?'+':''}฿${fmt(cal.fv-cal.fc)}</td></tr></tbody></table></div></div>`:''}
-    ${c.notes?`<div class="report-section"><h4>📝 หมายเหตุ</h4><p style="font-size:12px;color:var(--g600);padding:8px 12px;background:var(--g50);border-radius:8px">${c.notes}</p></div>`:''}
-    <div style="font-size:10px;color:var(--g400);text-align:center;margin-bottom:12px;padding-top:8px;border-top:1px solid var(--g100)">จัดทำโดย ${D.agentName} • ${now} • Asset Hub</div>
-    <div class="br no-print"><button class="btn bs" onclick="closeModal()">ปิด</button><button class="btn bp" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button></div>
+    <div class="report-section"><h4>💰 สรุปมูลค่าสินทรัพย์</h4><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${pie.length?pieSVG(pie,96):''}<div style="flex:1;min-width:160px"><table style="width:100%;font-size:12px;border-collapse:collapse">${pie.map(d=>`<tr><td style="padding:5px 8px"><div style="display:flex;align-items:center;gap:7px"><div style="width:9px;height:9px;border-radius:50%;background:${d.color}"></div><span style="color:#4b5563">${d.name}</span></div></td><td style="padding:5px 8px;font-weight:600;text-align:right">฿${fmt(d.value)}</td><td style="padding:5px 8px;color:#9ca3af;font-size:11px;text-align:right">${cal.total>0?(d.value/cal.total*100).toFixed(0):0}%</td></tr>`).join('')}<tr style="border-top:1px solid #e5e7eb"><td colspan="2" style="padding:6px 8px;font-weight:700;font-size:14px;color:#6366f1">฿${fmt(cal.total)}</td><td></td></tr></table></div></div></div>
+    ${ins.length?`<div class="report-section"><h4>🛡️ กรมธรรม์ (${ins.length} ฉบับ)</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>แบบประกัน</th><th>บริษัท</th><th>ประเภท</th><th class="r">เบี้ย/ปี</th><th class="r">มูลค่า</th><th class="r">ครบกำหนด</th></tr></thead><tbody>${ins.map(i=>{const lv=i.startDate&&i.sumInsured?calcSV(Number(i.sumInsured),i.startDate):null;const dv=lv!==null?lv:i.curVal;return`<tr><td><b>${i.plan}</b></td><td style="color:#6b7280">${i.co}</td><td>${tl[i.type]||i.type}</td><td class="r">฿${fmt(i.premium)}</td><td class="r" style="color:#10b981">฿${fmt(dv||0)}</td><td class="r" style="font-size:11px;color:#6b7280">${i.dueDate||'—'}</td></tr>`;}).join('')}<tr style="background:#fffbeb"><td colspan="3" style="font-weight:600">รวมเบี้ย/ปี</td><td class="r" style="font-weight:700;color:#f59e0b">฿${fmt(cal.iprem)}</td><td class="r" style="font-weight:700;color:#10b981">฿${fmt(cal.iv)}</td><td></td></tr></tbody></table></div></div>`:''}
+    ${stocks.length?`<div class="report-section"><h4>📈 พอร์ตหุ้น</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>หุ้น</th><th>ชื่อบริษัท</th><th class="r">จำนวน</th><th class="r">ต้นทุน</th><th class="r">ราคา</th><th class="r">มูลค่า</th><th class="r">กำไร</th></tr></thead><tbody>${stocks.map(s=>{const fx=s.mkt==='US'?FX:1,v=s.qty*s.price*fx,co=s.qty*s.cost*fx,pnl=v-co;return`<tr><td><b>${s.sym}</b></td><td style="color:#6b7280">${s.name}</td><td class="r">${fmt(s.qty)}</td><td class="r">${s.mkt==='US'?'$':'฿'}${fmtD(s.cost)}</td><td class="r">${s.mkt==='US'?'$':'฿'}${fmtD(s.price)}</td><td class="r" style="font-weight:500">฿${fmt(v)}</td><td class="r" style="color:${pnl>=0?'#10b981':'#ef4444'}">${pnl>=0?'+':''}฿${fmt(pnl)}</td></tr>`;}).join('')}<tr style="background:#eef2ff"><td colspan="5" style="font-weight:600">รวม</td><td class="r" style="font-weight:700">฿${fmt(cal.sv)}</td><td class="r" style="font-weight:700;color:${cal.sv>=cal.sc?'#10b981':'#ef4444'}">${cal.sv>=cal.sc?'+':''}฿${fmt(cal.sv-cal.sc)}</td></tr></tbody></table></div></div>`:''}
+    ${funds.length?`<div class="report-section"><h4>📊 กองทุนรวม</h4><div style="overflow-x:auto"><table class="rpt-tbl"><thead><tr><th>กองทุน</th><th>ประเภท</th><th class="r">NAV</th><th class="r">หน่วย</th><th class="r">มูลค่า</th><th class="r">กำไร</th></tr></thead><tbody>${funds.map(f=>{const v=f.nav*f.units,co=f.cost*f.units,pnl=v-co,pp=co>0?(pnl/co*100):0;return`<tr><td><b>${f.sym}</b><div style="font-size:10px;color:#9ca3af">${f.name}</div></td><td>${ftl[f.type]||f.type}</td><td class="r">฿${fmtD(f.nav)}</td><td class="r">${fmt(f.units)}</td><td class="r" style="font-weight:500">฿${fmt(v)}</td><td class="r" style="color:${pnl>=0?'#10b981':'#ef4444'}">${pnl>=0?'+':''}${pp.toFixed(1)}%</td></tr>`;}).join('')}<tr style="background:#fffbeb"><td colspan="4" style="font-weight:600">รวม</td><td class="r" style="font-weight:700">฿${fmt(cal.fv)}</td><td class="r" style="font-weight:700;color:${cal.fv>=cal.fc?'#10b981':'#ef4444'}">${cal.fv>=cal.fc?'+':''}฿${fmt(cal.fv-cal.fc)}</td></tr></tbody></table></div></div>`:''}
+    ${c.notes?`<div class="report-section"><h4>📝 หมายเหตุ</h4><p style="font-size:12px;color:#4b5563;padding:8px 12px;background:#f9fafb;border-radius:8px">${c.notes}</p></div>`:''}
+    <div style="font-size:10px;color:#9ca3af;text-align:center;margin-bottom:12px;padding-top:8px;border-top:1px solid #e5e7eb">จัดทำโดย ${D.agentName} • ${now} • Asset Hub</div>
+  `;
+}
+
+function downloadPDF(id){
+  const c=D.clients.find(x=>x.id===id);if(!c)return;
+  showToast('กำลังสร้าง PDF...');
+  function generate(){
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:fixed;top:-9999px;left:-9999px;width:794px;padding:24px;background:#fff;font-family:Noto Sans Thai,-apple-system,sans-serif;font-size:13px;color:#111827';
+    wrap.innerHTML=reportHTML(id);
+    document.body.appendChild(wrap);
+    html2pdf().set({
+      margin:[10,10,10,10],
+      filename:'report-'+c.name+'.pdf',
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:2,useCORS:true,logging:false},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(wrap).save().then(()=>{
+      document.body.removeChild(wrap);
+      showToast('ดาวน์โหลด PDF สำเร็จ');
+    });
+  }
+  if(!window.html2pdf){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload=generate;
+    document.head.appendChild(s);
+  } else { generate(); }
+}
+
+// ── Report ──
+function openReport(id){
+  const c=D.clients.find(x=>x.id===id);if(!c)return;
+  showModal(`📄 รายงานพอร์ต — ${c.name}`,`
+    ${reportHTML(id)}
+    <div class="br no-print"><button class="btn bs" onclick="closeModal()">ปิด</button><button class="btn bp" onclick="downloadPDF(${id})">📥 ดาวน์โหลด PDF</button></div>
   `,'xw');
 }
 
