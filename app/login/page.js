@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [mode, setMode] = useState('login') // 'login' | 'signup'
+  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -19,7 +19,15 @@ export default function LoginPage() {
     setSuccess('')
     setLoading(true)
 
-    if (mode === 'login') {
+    if (mode === 'forgot') {
+      const redirectTo = window.location.origin + '/reset-password'
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+      if (error) {
+        setError('ส่งอีเมลไม่สำเร็จ: ' + error.message)
+      } else {
+        setSuccess('ส่งอีเมลสำเร็จ! กรุณาเช็คอีเมลเพื่อรีเซ็ตรหัสผ่าน')
+      }
+    } else if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง')
@@ -33,7 +41,6 @@ export default function LoginPage() {
       if (error) {
         setError('สมัครไม่สำเร็จ: ' + error.message)
       } else {
-        // Update display_name in profiles
         if (data.user) {
           await supabase.from('profiles').update({ display_name: name }).eq('id', data.user.id)
         }
@@ -42,6 +49,10 @@ export default function LoginPage() {
     }
     setLoading(false)
   }
+
+  const subtitle = mode === 'login' ? 'เข้าสู่ระบบเพื่อดูพอร์ตของคุณ'
+    : mode === 'signup' ? 'สร้างบัญชีใหม่'
+    : 'รีเซ็ตรหัสผ่านผ่านอีเมล'
 
   return (
     <div style={{
@@ -66,28 +77,28 @@ export default function LoginPage() {
             fontSize: '22px', fontWeight: '700', color: '#fff'
           }}>A</div>
           <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#111827', margin: 0 }}>Asset Hub</h1>
-          <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '4px' }}>
-            {mode === 'login' ? 'เข้าสู่ระบบเพื่อดูพอร์ตของคุณ' : 'สร้างบัญชีใหม่'}
-          </p>
+          <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '4px' }}>{subtitle}</p>
         </div>
 
-        {/* Toggle */}
-        <div style={{
-          display: 'flex', background: '#f3f4f6', borderRadius: '12px',
-          padding: '4px', marginBottom: '24px'
-        }}>
-          {[['login', 'เข้าสู่ระบบ'], ['signup', 'สมัครสมาชิก']].map(([k, l]) => (
-            <button key={k} onClick={() => { setMode(k); setError(''); setSuccess('') }} style={{
-              flex: 1, padding: '8px', borderRadius: '9px', border: 'none',
-              background: mode === k ? '#fff' : 'transparent',
-              color: mode === k ? '#6366f1' : '#6b7280',
-              fontWeight: mode === k ? '600' : '400',
-              fontSize: '13px', cursor: 'pointer',
-              boxShadow: mode === k ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-              transition: 'all .2s', fontFamily: 'inherit'
-            }}>{l}</button>
-          ))}
-        </div>
+        {/* Toggle (hidden in forgot mode) */}
+        {mode !== 'forgot' && (
+          <div style={{
+            display: 'flex', background: '#f3f4f6', borderRadius: '12px',
+            padding: '4px', marginBottom: '24px'
+          }}>
+            {[['login', 'เข้าสู่ระบบ'], ['signup', 'สมัครสมาชิก']].map(([k, l]) => (
+              <button key={k} onClick={() => { setMode(k); setError(''); setSuccess('') }} style={{
+                flex: 1, padding: '8px', borderRadius: '9px', border: 'none',
+                background: mode === k ? '#fff' : 'transparent',
+                color: mode === k ? '#6366f1' : '#6b7280',
+                fontWeight: mode === k ? '600' : '400',
+                fontSize: '13px', cursor: 'pointer',
+                boxShadow: mode === k ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all .2s', fontFamily: 'inherit'
+              }}>{l}</button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           {mode === 'signup' && (
@@ -114,16 +125,30 @@ export default function LoginPage() {
             />
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>
-              รหัสผ่าน
-            </label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder={mode === 'signup' ? 'อย่างน้อย 6 ตัวอักษร' : '••••••••'} required
-              style={inputStyle}
-            />
-          </div>
+          {mode !== 'forgot' && (
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#374151', marginBottom: '5px' }}>
+                รหัสผ่าน
+              </label>
+              <input
+                type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder={mode === 'signup' ? 'อย่างน้อย 6 ตัวอักษร' : '••••••••'} required
+                style={inputStyle}
+              />
+            </div>
+          )}
+
+          {/* Forgot password link */}
+          {mode === 'login' && (
+            <div style={{ textAlign: 'right', marginBottom: '16px' }}>
+              <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccess('') }}
+                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                ลืมรหัสผ่าน?
+              </button>
+            </div>
+          )}
+
+          {mode === 'forgot' && <div style={{ marginBottom: '20px' }} />}
 
           {error && (
             <div style={{
@@ -148,8 +173,18 @@ export default function LoginPage() {
             fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'all .2s', fontFamily: 'inherit'
           }}>
-            {loading ? '⏳ กำลังดำเนินการ...' : mode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}
+            {loading ? '⏳ กำลังดำเนินการ...'
+              : mode === 'login' ? 'เข้าสู่ระบบ'
+              : mode === 'signup' ? 'สร้างบัญชี'
+              : 'ส่งอีเมลรีเซ็ตรหัสผ่าน'}
           </button>
+
+          {mode === 'forgot' && (
+            <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess('') }}
+              style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'none', border: 'none', color: '#6b7280', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>
+              ← กลับหน้าเข้าสู่ระบบ
+            </button>
+          )}
         </form>
       </div>
     </div>
